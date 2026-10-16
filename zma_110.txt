@@ -1,0 +1,144 @@
+*& HR Employee ALV Report
+*& Logical Database: PNP
+REPORT zma_110.
+* HR Infotypes
+*---------------------------------------------------------------------*
+INFOTYPES:
+  0001,  "Organizational Assignment
+  0002,  "Personal Data
+  0008,  "Basic Pay
+  0105.  "Communication
+
+*---------------------------------------------------------------------*
+* Selection Screen
+*---------------------------------------------------------------------*
+TABLES: pernr.
+
+SELECT-OPTIONS s_pernr FOR pernr-pernr.
+
+*---------------------------------------------------------------------*
+* Output Structure
+*---------------------------------------------------------------------*
+TYPES: BEGIN OF ty_employee,
+         pernr TYPE pernr_d,
+         ename TYPE pa0001-ename,
+         gbdat TYPE pa0002-gbdat,
+         natio TYPE pa0002-natio,
+         plans TYPE pa0001-plans,
+         orgeh TYPE pa0001-orgeh,
+         bukrs TYPE pa0001-bukrs,
+         werks TYPE pa0001-werks,
+         btrtl TYPE pa0001-btrtl,
+         salary TYPE pa0008-bet01,
+         waers TYPE pa0008-waers,
+         email TYPE pa0105-usrid_long,
+       END OF ty_employee.
+
+*---------------------------------------------------------------------*
+* Data
+*---------------------------------------------------------------------*
+DATA:
+  gt_employee TYPE STANDARD TABLE OF ty_employee,
+  gs_employee TYPE ty_employee.
+
+*---------------------------------------------------------------------*
+* Employee Processing
+*---------------------------------------------------------------------*
+GET pernr.
+
+  "Check employee number selection
+  CHECK pernr-pernr IN s_pernr.
+
+  CLEAR gs_employee.
+
+  gs_employee-pernr = pernr-pernr.
+
+  "Read personal data
+  READ TABLE p0002
+    WITH KEY pernr = pernr-pernr
+    INTO DATA(ls_p0002).
+
+  IF sy-subrc = 0.
+    gs_employee-gbdat = ls_p0002-gbdat.
+    gs_employee-natio = ls_p0002-natio.
+  ENDIF.
+
+  "Read organizational assignment
+  READ TABLE p0001
+    WITH KEY pernr = pernr-pernr
+    INTO DATA(ls_p0001).
+
+  IF sy-subrc = 0.
+    gs_employee-ename = ls_p0001-ename.
+    gs_employee-plans = ls_p0001-plans.
+    gs_employee-orgeh = ls_p0001-orgeh.
+    gs_employee-bukrs = ls_p0001-bukrs.
+    gs_employee-werks = ls_p0001-werks.
+    gs_employee-btrtl = ls_p0001-btrtl.
+  ENDIF.
+
+  "Read basic pay
+  READ TABLE p0008
+    WITH KEY pernr = pernr-pernr
+    INTO DATA(ls_p0008).
+
+  IF sy-subrc = 0.
+    gs_employee-salary = ls_p0008-bet01.
+    gs_employee-waers = ls_p0008-waers.
+  ENDIF.
+
+  "Read email address (subtype 0010)
+  READ TABLE p0105
+    WITH KEY pernr = pernr-pernr
+             subty = '0010'
+    INTO DATA(ls_p0105).
+
+  IF sy-subrc = 0.
+    gs_employee-email = ls_p0105-usrid_long.
+  ENDIF.
+
+  APPEND gs_employee TO gt_employee.
+
+*---------------------------------------------------------------------*
+* Display ALV After Employee Processing
+*---------------------------------------------------------------------*
+END-OF-SELECTION.
+
+  IF gt_employee IS INITIAL.
+    MESSAGE 'No employee data found' TYPE 'I'.
+    RETURN.
+  ENDIF.
+
+  TRY.
+
+      DATA lo_alv TYPE REF TO cl_salv_table.
+
+      cl_salv_table=>factory(
+        IMPORTING
+          r_salv_table = lo_alv
+        CHANGING
+          t_table      = gt_employee ).
+
+      lo_alv->get_functions( )->set_all( abap_true ).
+      lo_alv->get_columns( )->set_optimize( abap_true ).
+
+      lo_alv->get_display_settings( )->set_striped_pattern(
+        abap_true ).
+
+      lo_alv->get_display_settings( )->set_list_header(
+        'HR Employee ALV Report' ).
+
+      lo_alv->get_sorts( )->add_sort(
+        columnname = 'PERNR' ).
+
+      lo_alv->display( ).
+
+    CATCH cx_salv_msg INTO DATA(lx_salv).
+
+      MESSAGE lx_salv->get_text( ) TYPE 'I'.
+
+    CATCH cx_salv_not_found INTO DATA(lx_not_found).
+
+      MESSAGE lx_not_found->get_text( ) TYPE 'I'.
+
+  ENDTRY.
